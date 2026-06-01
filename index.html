@@ -219,6 +219,15 @@
       <div class="stat"><div class="v" id="cardLen">0"</div><div class="l">Length</div></div>
       <div class="stat"><div class="v" id="cardWt">0 lb</div><div class="l">Weight</div></div>
     </div>
+    <div id="cardSize" style="margin:8px 6px 2px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#8a7b66;font-weight:700;">
+        <span>🐟 small</span><span id="cardSizePct"></span><span>🏆 max</span>
+      </div>
+      <div style="position:relative;height:14px;border-radius:999px;background:#efe2cb;overflow:hidden;margin-top:3px;">
+        <div id="cardSizeFill" style="position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,#9be88a,#3fae5a);"></div>
+        <div id="cardSizeBest" style="position:absolute;top:-2px;width:2px;height:18px;background:#b8860b;left:0;display:none;"></div>
+      </div>
+    </div>
     <div class="flav" id="cardFlav"></div>
     <div class="by" id="cardBy"></div>
     <button class="bigbtn" id="cardBtn">Next cast →</button>
@@ -707,11 +716,25 @@ const Sound=(()=>{
     init(){ensure();startAmbient();},
     cast(){noise(0,.18,.3,1400);tone(420,.02,.12,'triangle',.12,640);},
     reelTick(){noise(0,0.016,0.05,2000);tone(150,0,0.035,'triangle',0.035);},
-    reelRun(){tone(380,0,0.20,'triangle',0.05,165);},
-    bite(){tone(660,0,.08,'sine',.18);tone(880,.09,.1,'sine',.16);},
+    reelRun(intensity=0){
+      const base=380-intensity*150;            // bigger fish -> deeper drag scream
+      tone(base,0,0.20+intensity*0.10,'triangle',0.05+intensity*0.03,base*0.45);
+      if(intensity>0.5)noise(0,0.18,0.06+intensity*0.05,300);   // low rumble bed
+    },
+    bite(intensity=0){
+      const lo=660-intensity*220;          // bigger fish -> lower, heavier knock
+      tone(lo,0,.08,'sine',.18);
+      tone(lo*1.33,.09,.10,'sine',.16);
+      if(intensity>0.5){noise(.02,.12,.18+intensity*0.12,600);}
+    },
     splash(){noise(0,.35,.4,1100);noise(.05,.3,.3,700);},
     plop(){noise(0,.14,.28,800);tone(300,0,.1,'sine',.1,170);},
     chime(){[523,659,784,1047].forEach((f,i)=>tone(f,i*0.09,.4,'sine',.16));},
+    fanfare(tier=1){
+      const seq = tier>=3 ? [523,659,784,1047,1319] : tier>=2 ? [523,659,784,1047] : [523,659,784];
+      seq.forEach((f,i)=>tone(f,i*0.08,.45,'sine',.16));
+      if(tier>=3){ [1568,1976].forEach((f,i)=>tone(f,0.45+i*0.07,.5,'triangle',.10)); }  // sparkle topper
+    },
     fail(){tone(300,0,.25,'sawtooth',.12,140);},
     setMuted(m){muted=m;if(ambGain)ambGain.gain.value=m?0:.035;},
     get muted(){return muted;}
@@ -728,8 +751,8 @@ const G={
   mode:'idle',          // idle | casting | waiting | bite | fighting | result
   turn:'dad',
   spot:null,            // weeds | deep | lure
-  t:0, modeT:0, biteAt:0, hookWindow:0,
-  fish:null, caught:null,
+  t:0, modeT:0, shake:0, biteAt:0, hookWindow:0,
+  fish:null, fishSize:null, hype:null, caught:null,
   collection:{},        // id -> {count,bestLen,bestWt,firstBy}
   // animated bits
   rodBend:{dad:0,son:0}, bob:{dad:0,son:0}, lineOut:0,
@@ -1191,7 +1214,9 @@ function drawAngler(x,y,who,t,active){
     ctx.fillStyle='rgba(255,255,255,.9)';ctx.beginPath();ctx.arc(lx-1.4,ly-1.4,1.5,0,TAU);ctx.fill();
     G.activeBobber={x:lx,y:ly};
   }else{
-    const bx=restX, dip=(active&&G.mode==='bite')?Math.sin(G.t*22)*4:0, by=restY+dip;
+    const hH=(active&&G.hype)?G.hype.h:0;
+    const yank=(active&&G.mode==='bite')?(4+hH*14)*Math.sin(G.t*(18+hH*10)):0;
+    const bx=restX, dip=yank, by=restY+dip;
     ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=1.2;
     ctx.beginPath();ctx.moveTo(tipX,tipY);ctx.lineTo(bx,by);ctx.stroke();
     if(!(active&&G.mode==='fighting')){
@@ -1199,8 +1224,10 @@ function drawAngler(x,y,who,t,active){
       ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(bx,by,5.5,0,Math.PI);ctx.fill();
       ctx.strokeStyle='rgba(0,0,0,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(bx,by,5.5,0,TAU);ctx.stroke();
     }
-    if(active&&G.mode==='bite'){ctx.fillStyle='#ffe14d';ctx.font='bold 26px Segoe UI';ctx.textAlign='center';
-      ctx.strokeStyle='#b8860b';ctx.lineWidth=4;ctx.strokeText('!',bx,by-18);ctx.fillText('!',bx,by-18);}
+    if(active&&G.mode==='bite'){const mk=(G.hype&&G.hype.tier>=3)?'‼':(G.hype&&G.hype.tier>=2)?'!!':'!';
+      const fs=22+ (G.hype?G.hype.h*14:0);
+      ctx.fillStyle='#ffe14d';ctx.font='bold '+fs.toFixed(0)+'px Segoe UI';ctx.textAlign='center';
+      ctx.strokeStyle='#b8860b';ctx.lineWidth=4;ctx.strokeText(mk,bx,by-18);ctx.fillText(mk,bx,by-18);}
     if(active)G.activeBobber={x:bx,y:restY};
   }
 }
@@ -1212,12 +1239,14 @@ function startFight(sp){
   // Reel while it's CALM (green); let go while it RUNS (orange). Timing is faster,
   // but holding straight through ALWAYS lands the fish eventually (kid-proof).
   const diff = sp.rarity==='legendary'?1.0 : sp.rarity==='rare'?0.5 : 0.25;
+  const hf = G.hype?G.hype.h:0;                 // 0..1 drama, NOT difficulty
   G.fight={
     prog:0.05, hold:false, diff, elapsed:0, clk:0,
-    reelRate:0.55 - diff*0.12,      // line gained while reeling during calm
-    runPenalty:0.30 + diff*0.18,    // gentle loss if you reel during a run
-    slip:0.05 + diff*0.05,          // tiny drift if you idle while it's calm
+    reelRate:0.55 - diff*0.12,      // line gained while reeling during calm (unchanged)
+    runPenalty:0.30 + diff*0.18,    // gentle loss if you reel during a run (unchanged)
+    slip:0.05 + diff*0.05,          // tiny drift if you idle while it's calm (unchanged)
     running:false, stateTimer:rnd(1.4,2.2), wob:0, idle:0,
+    drama:hf,                       // amplifies thrash + sound + shake only
   };
   const fill=el('reelBarFill');if(fill){fill.style.width='5%';fill.classList.remove('tug');}
   const btn=el('reelBtn');if(btn){btn.textContent='🎣 HOLD TO REEL!';btn.classList.remove('run');}
@@ -1229,12 +1258,12 @@ function updateFight(dt){
   if(f.stateTimer<=0){
     f.running=!f.running;
     f.stateTimer = f.running ? rnd(0.5,0.9)+f.diff*0.35 : rnd(1.4,2.2);
-    if(f.running)Sound.reelRun();                      // gentle drag cue: the fish is running!
+    if(f.running){ Sound.reelRun(f.drama||0); G.shake=Math.max(G.shake,3+(f.drama||0)*7); buzz(20+((f.drama||0)*40)|0); }
   }
   if(f.hold){
     if(f.running){ f.prog -= f.runPenalty*dt; }        // reeling against a run loses a little line
     else { f.prog += f.reelRate*dt; f.clk-=dt; if(f.clk<=0){Sound.reelTick(); f.clk=0.08-f.prog*0.03;} }
-    f.wob += dt*20; f.idle=0;
+    f.wob += dt*(20+ (f.drama||0)*16); f.idle=0;
   }else{
     if(!f.running) f.prog -= f.slip*dt;                // resting is safe during a run
     if(f.prog<=0.002) f.idle=(f.idle||0)+dt;
@@ -1256,16 +1285,35 @@ function drawFightUI(){
   const tip=G.activeTip||{x:bob.x,y:wy-70};
   ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1.5;
   ctx.beginPath();ctx.moveTo(tip.x,tip.y);ctx.quadraticCurveTo((tip.x+fx)/2,(tip.y+fy)/2-10,fx,fy);ctx.stroke();
-  // the hooked fish, tilted & wiggling as it's pulled up
+  // the hooked fish rises as a murky shadow — bigger/darker for bigger fish,
+  // blurry deep down, sharpening (but never full colour) as it nears the surface.
+  const pct=G.hype?G.hype.sizePct:0.4;
+  const shadowL=lerp(54,104,pct)*(G.fish&&G.fish.depth<0.2?1.12:1);  // long fish read bigger
+  const clarity=clamp((f.prog-0.15)/0.7,0,1);                        // 0 deep .. 1 near top
   ctx.save();ctx.translate(fx,fy);ctx.rotate(-0.5 + Math.sin(f.wob*0.8)*0.22);
-  drawFish(ctx,G.fish,0,0,72,-1);ctx.restore();
+  // soft dark blob behind the silhouette adds "depth blur" when deep
+  ctx.fillStyle='rgba(8,22,30,'+(0.30*(1-clarity)).toFixed(3)+')';
+  ctx.beginPath();ctx.ellipse(0,0,shadowL*0.55,shadowL*0.55*0.42,0,0,TAU);ctx.fill();
+  // the shadow itself: a dark-blue tinted silhouette, never the real colours
+  const sv={...G.fish,back:'#16313f',mid:'#1d4150',belly:'#2a5566',pattern:null,lat:null,eye:'#0c1a22',glassyEye:false};
+  ctx.globalAlpha=lerp(0.55,0.92,clarity);
+  drawFish(ctx,sv,0,0,shadowL,-1);
+  ctx.globalAlpha=1;ctx.restore();
+  // a translucent water veil over the whole shadow, thinning as it rises
+  ctx.fillStyle='rgba(34,96,112,'+(0.34*(1-clarity)).toFixed(3)+')';
+  ctx.beginPath();ctx.ellipse(fx,fy,shadowL*0.75,shadowL*0.5,0,0,TAU);ctx.fill();
   // surface splash ring as it nears the top
   if(f.prog>0.7){const a=(f.prog-0.7)/0.3;ctx.strokeStyle=`rgba(230,245,250,${0.55*a})`;ctx.lineWidth=3;
     ctx.beginPath();ctx.ellipse(fx,surfaceY,28*a+8,9*a+3,0,0,TAU);ctx.stroke();}
   // little caption over the fish
   ctx.fillStyle='#fff';ctx.font='bold 14px "Segoe UI",sans-serif';ctx.textAlign='center';
   ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=3;
-  const cap=f.running?'💪 It\'s running — let go!':'🎣 Reeling in…';
+  const tier=G.hype?G.hype.tier:1;
+  let cap;
+  if(f.running) cap='💪 It\'s running — let go!';
+  else if(f.prog<0.33) cap='Something\'s on the line…';
+  else if(f.prog<0.70) cap=(tier>=2)?'💪 This one\'s got some weight!':'🎣 Reeling it in…';
+  else cap=(tier>=3)?'🌟 WHAT *IS* THAT?!':(tier>=2)?'🔥 IT\'S A BIG ONE!':'Almost up…';
   ctx.strokeText(cap,fx,fy-46);ctx.fillText(cap,fx,fy-46);
 }
 
@@ -1303,38 +1351,65 @@ function pickFish(){
   return pool[0][0];
 }
 function onBite(){
-  G.fish=pickFish();Sound.bite();
+  G.fish=pickFish();
+  G.fishSize=rollSize(G.fish);
+  G.hype=computeHype(G.fish,G.fishSize);
+  Sound.bite(G.hype?G.hype.h:0);
   G.hookWindow=1.6;setMode('bite');
 }
 function setHook(){
   if(G.mode!=='bite')return;
   G.rodBend[G.turn]=1;startFight(G.fish);setMode('fighting');
 }
+/*<computeHype>*/
+function computeHype(sp,size){
+  const span=Math.max(0.001,sp.maxLen-sp.minLen);
+  const sizePct=clamp((size.len-sp.minLen)/span,0,1);
+  const rarityBoost=sp.rarity==='legendary'?0.60:sp.rarity==='rare'?0.30:0;
+  const h=clamp(sizePct*0.7+rarityBoost,0,1);
+  let tier=1;
+  if(sp.rarity==='legendary'||sizePct>=0.90||(sp.rarity==='rare'&&sizePct>=0.75))tier=3;
+  else if(sp.rarity==='rare'||sizePct>=0.75)tier=2;
+  else if(sp.rarity==='common'&&sizePct<0.25)tier=0;
+  return {h,tier,sizePct};
+}
+/*</computeHype>*/
 function rollSize(sp){
   const len=sp.minLen+(sp.maxLen-sp.minLen)*Math.pow(Math.random(),1.6);
   const wt=Math.max(0.1,Math.pow(len,3)*sp.wt);
   return {len:+len.toFixed(1),wt:+wt.toFixed(1)};
 }
 function landFish(){
-  const sp=G.fish, sz=rollSize(sp);
-  Sound.splash();spawnSplash(G.activeBobber.x,G.activeBobber.y,18);
-  setTimeout(()=>{Sound.chime();spawnConfetti();},220);
-  // record
+  const sp=G.fish, sz=G.fishSize||rollSize(sp);
+  const hype=G.hype||computeHype(sp,sz);
+  Sound.splash();spawnSplash(G.activeBobber.x,G.activeBobber.y,18+hype.tier*6);
+  if(!REDUCED_MOTION)G.shake=Math.max(G.shake,6+hype.tier*4);
+  buzz(40+hype.tier*30);
+  const conf = 50+hype.tier*40;
+  const goldPal=['#ffd75a','#ffe14d','#f6b352','#fff3c0','#e0913a'];
+  setTimeout(()=>{Sound.fanfare(hype.tier);spawnConfetti(conf, hype.tier>=3?goldPal:undefined);},220);
+  // record (capture previous best BEFORE updating, for the size meter)
   const rec=G.collection[sp.id]||{count:0,bestLen:0,bestWt:0,firstBy:G.turn};
+  const prevBest=rec.bestLen;
   const isRecord=sz.len>rec.bestLen;
   rec.count++;if(sz.len>rec.bestLen)rec.bestLen=sz.len;if(sz.wt>rec.bestWt)rec.bestWt=sz.wt;
   G.collection[sp.id]=rec;save();
-  G.caught={sp,sz,by:G.turn,isNew:rec.count===1,isRecord};
+  G.caught={sp,sz,by:G.turn,isNew:rec.count===1,isRecord,hype,prevBest};
   G.fight=null;
   setMode('result');
   showCard();
 }
 function missFish(msg){
-  Sound.fail();G.fight=null;G.fish=null;
-  toast(msg||'Aw, it got away!');
+  Sound.fail();
+  // a teasing near-miss when a BIG one throws the hook — drives "one more cast"
+  if(!msg && G.hype && G.hype.tier>=2){
+    msg = G.hype.tier>=3 ? '😱 SO CLOSE — a MONSTER spit the hook!' : '😮 That was a big one — it threw the hook!';
+  }
+  G.fight=null;G.fish=null;G.fishSize=null;G.hype=null;
+  toast(msg||'Aw, it nibbled and let go.');
   setMode('result');
   // brief pause then next turn
-  setTimeout(()=>{ if(G.mode==='result'){nextTurn();} },1500);
+  setTimeout(()=>{ if(G.mode==='result'){nextTurn();} },1700);
 }
 function nextTurn(){
   G.rodBend[G.turn]=0;
@@ -1345,8 +1420,9 @@ function nextTurn(){
 
 /* particles */
 function spawnSplash(x,y,n){for(let i=0;i<n;i++)G.splashes.push({x,y,r:rnd(2,5),vx:rnd(-1.6,1.6),vy:rnd(-3.4,-0.5),life:1});}
-function spawnConfetti(){const cx=W/2,cy=H*0.4,cols=['#f6b352','#e2607e','#7fd47f','#5fa8e0','#c558d6','#ffe14d'];
-  for(let i=0;i<70;i++)G.confetti.push({x:cx+rnd(-40,40),y:cy,vx:rnd(-4,4),vy:rnd(-7,-2),rot:rnd(TAU),vr:rnd(-.3,.3),col:pick(cols),life:1});}
+function spawnConfetti(n=70,cols){const cx=W/2,cy=H*0.4;
+  cols=cols||['#f6b352','#e2607e','#7fd47f','#5fa8e0','#c558d6','#ffe14d'];
+  for(let i=0;i<n;i++)G.confetti.push({x:cx+rnd(-40,40),y:cy,vx:rnd(-4,4),vy:rnd(-7,-2),rot:rnd(TAU),vr:rnd(-.3,.3),col:pick(cols),life:1});}
 function updateParticles(dt){
   for(const s of G.splashes){s.x+=s.vx;s.y+=s.vy;s.vy+=0.18;s.life-=dt*1.4;}
   G.splashes=G.splashes.filter(s=>s.life>0);
@@ -1356,6 +1432,8 @@ function updateParticles(dt){
 
 /* ---------- 8. UI wiring ---------- */
 const el=id=>document.getElementById(id);
+const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function buzz(ms){ try{ if(!Sound.muted && navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
 const spotRow=el('spotRow');
 // build spot buttons
 Object.entries(SPOTS).forEach(([key,s])=>{
@@ -1410,18 +1488,45 @@ function showCard(){
   el('catchCard').classList.add('show');   // show first — never let a draw error hide the catch
   try{
     const {sp,sz,by,isNew,isRecord}=G.caught;
-    el('cardBanner').textContent = isNew? '✨ New species!' : isRecord? '🏆 New personal best!' : 'Nice catch!';
+    const tier=(G.caught.hype&&G.caught.hype.tier)||1;
+    el('cardBanner').textContent =
+        sp.rarity==='legendary' ? '🌟 LEGENDARY!'
+      : tier>=3                 ? '🏆 LUNKER!'
+      : isNew                   ? '✨ New species!'
+      : isRecord                ? '🥇 New personal best!'
+      :                           'Nice catch!';
     el('cardName').textContent=sp.name;
     const rar=RARITY[sp.rarity];
     const rEl=el('cardRar');rEl.textContent=rar.label;rEl.style.background=rar.c;
     el('cardLen').textContent=sz.len+'"';
     el('cardWt').textContent=sz.wt+' lb';
+    const hp=G.caught.hype||computeHype(sp,sz);
+    el('cardSizeFill').style.width=(hp.sizePct*100).toFixed(0)+'%';
+    el('cardSizePct').textContent = hp.sizePct>=0.90?'Top 10%! 🤩' : hp.sizePct>=0.75?'A big one!' : '';
+    const meterSpan=Math.max(0.001,sp.maxLen-sp.minLen);
+    const bestPct=clamp(((G.caught.prevBest||0)-sp.minLen)/meterSpan,0,1);
+    const bestEl=el('cardSizeBest');
+    if((G.caught.prevBest||0)>0){bestEl.style.display='block';bestEl.style.left=(bestPct*100).toFixed(0)+'%';}
+    else{bestEl.style.display='none';}
     el('cardFlav').textContent=pick(sp.flav);
     const who=ANGLERS[by]||ANGLERS.dad;
     el('cardBy').textContent=`Reeled in by ${who.emoji} ${who.name}`;
-    const cc=el('cardFish'),cx2=cc.getContext('2d');cx2.setTransform(1,0,0,1,0,0);cx2.clearRect(0,0,cc.width,cc.height);
+    const cc=el('cardFish'),cx2=cc.getContext('2d');
     const L=Math.min(sz.len*9+150, fitL(sp,480,250));
-    drawFish(cx2,sp,cc.width/2,cc.height/2,L,-1);
+    const sv={...sp,back:'#16313f',mid:'#1d4150',belly:'#2a5566',pattern:null,lat:null,eye:'#0c1a22',glassyEye:false};
+    const t0=performance.now();
+    (function develop(now){
+      if(!el('catchCard').classList.contains('show'))return;          // bail if dismissed
+      const p=Math.min(1,(now-t0)/360);
+      cx2.setTransform(1,0,0,1,0,0);cx2.clearRect(0,0,cc.width,cc.height);
+      const scale=lerp(0.86,1,p), Ls=L*scale;
+      cx2.globalAlpha=1;
+      drawFish(cx2,sv,cc.width/2,cc.height/2,Ls,-1);                   // shadow underneath
+      cx2.globalAlpha=p;                                              // full colour fades in
+      drawFish(cx2,sp,cc.width/2,cc.height/2,Ls,-1);
+      cx2.globalAlpha=1;
+      if(p<1)requestAnimationFrame(develop);
+    })(t0);
   }catch(e){}
 }
 function hideCard(){el('catchCard').classList.remove('show');}
@@ -1525,7 +1630,7 @@ function frame(now){
     if(G.modeT>0.95){G._splashed=false; setMode('waiting'); G.biteAt=G._perfect?rnd(0.7,2.0):rnd(1.2,3.8);}
   }
   else if(G.mode==='waiting'){if(G.modeT>G.biteAt)onBite();}
-  else if(G.mode==='bite'){if(G.modeT>G.hookWindow)missFish('Too slow — it spit the hook!');}
+  else if(G.mode==='bite'){if(G.modeT>G.hookWindow)missFish();}
   else if(G.mode==='fighting'){updateFight(dt);}
   // rod bend easing (with a forward whip on the cast)
   for(const k of ['dad','son']){
@@ -1536,11 +1641,17 @@ function frame(now){
   }
   updateParticles(dt);
 
-  // render
+  // render (with decaying screen shake; disabled for reduced-motion users)
+  G.shake=Math.max(0,G.shake-dt*22);
   ctx.clearRect(0,0,W,H);
+  ctx.save();
+  if(!REDUCED_MOTION && G.shake>0.1){
+    const a=G.shake;ctx.translate((Math.random()*2-1)*a,(Math.random()*2-1)*a);
+  }
   drawScene(G.t);
   drawOverlay(G.t);
   if(G.mode==='fighting')drawFightUI();
+  ctx.restore();
   requestAnimationFrame(frame);
 }
 

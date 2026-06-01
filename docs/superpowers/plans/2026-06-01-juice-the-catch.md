@@ -106,7 +106,7 @@ test('hype h stays within [0,1] and sizePct is reported', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `node --test tests/`
+Run: `node --test tests/hype.test.mjs`
 Expected: FAIL — `Error: computeHype markers not found in index.html`
 
 - [ ] **Step 3: Add the `computeHype` helper (with extraction markers)**
@@ -131,7 +131,7 @@ function computeHype(sp,size){
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `node --test tests/`
+Run: `node --test tests/hype.test.mjs`
 Expected: PASS — 7/7 tests pass.
 
 - [ ] **Step 5: Roll the fish's size at bite time and store hype**
@@ -664,7 +664,7 @@ git commit -m "feat: tiered near-miss glimpse when a big fish throws the hook"
 
 - [ ] **Step 1: Run the automated test**
 
-Run: `node --test tests/`
+Run: `node --test tests/hype.test.mjs`
 Expected: PASS — 7/7.
 
 - [ ] **Step 2: Kid-proof invariant — hold-through always lands**
