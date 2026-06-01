@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Bait &amp; Bicker</title>
+<meta name="description" content="Bait & Bicker — a cozy take-turns family fishing game." />
+<!-- iPad / iPhone home-screen app feel (Add to Home Screen -> fullscreen) -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Bait & Bicker" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0e1620" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎣</text></svg>" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e1620'/><text x='50' y='52' font-size='62' text-anchor='middle' dominant-baseline='central'>🎣</text></svg>" />
 <style>
   :root{
     --gold:#f6b352; --gold-d:#e0913a;
@@ -12,6 +21,7 @@
     --shadow:0 8px 24px rgba(40,25,10,.28);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  button,.bigbtn,.pill,.spot{touch-action:manipulation; -webkit-touch-callout:none;}
   html,body{margin:0;height:100%;}
   body{
     background:#1d2733;
@@ -1536,6 +1546,7 @@ function updateParticles(dt){
 /* ---------- 8. UI wiring ---------- */
 const el=id=>document.getElementById(id);
 const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints||0)>0;
 function buzz(ms){ try{ if(!Sound.muted && navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
 function closeLog(){el('logPanel').classList.remove('show');}
 function closeGoals(){el('goalsPanel').classList.remove('show');}
@@ -1599,13 +1610,14 @@ function updateUI(){
   else if(charging) btn.textContent='RELEASE! 🎣';
   else if(m==='bite') btn.textContent='SET THE HOOK!';
   else if(m==='fighting') btn.textContent='🎣 HOLD TO REEL!';
-  // hint text
+  // hint text (touch devices have no spacebar, so phrase for the button)
+  const press = TOUCH ? 'the button' : 'SPACE';
   let h='';
-  if(idle) h=`Hold SPACE (or the button) to power up your cast, ${a.name}!`;
-  else if(charging) h='Release to cast — stop in the green zone for a perfect cast!';
+  if(idle) h=`Hold ${press} to power up your cast, ${a.name}!`;
+  else if(charging) h='Let go to cast — stop in the green zone for a perfect cast!';
   else if(m==='casting') h=G._perfect?'🎯 Perfect cast!':'Casting out…';
   else if(m==='waiting') h='Watch the bobber… wait for a bite.';
-  else if(m==='bite') h='A bite! Tap SPACE (or the button) to set the hook!';
+  else if(m==='bite') h=`A bite! Tap ${press} (or the fish!) to set the hook!`;
   else if(m==='fighting') h="Hold to reel while it's GREEN — let go when it turns ORANGE!";
   else h='';
   el('hint').textContent=h;
