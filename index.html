@@ -795,7 +795,7 @@ function resize(){
 }
 window.addEventListener('resize',resize);
 
-function waterY(){return H*0.62;}
+function waterY(){return H*0.66;}
 
 /* decorative elements with stable positions (relative 0..1, seeded) */
 const DECOR={
@@ -1108,7 +1108,7 @@ function drawGrandpaCraig(x,deckY,t){
   charLabel(x,deckY-50,'🍺 Grandpa Craig','#9b59b6');
 }
 function drawGrandpaEd(t,wy){
-  G.boatX += G.boatDir*4.4;
+  G.boatX += G.boatDir*3.3;
   if(G.boatX>W+170){G.boatX=W+170;G.boatDir=-1;}
   else if(G.boatX<-170){G.boatX=-170;G.boatDir=1;}
   const x=G.boatX, band=H-wy, dir=G.boatDir;
@@ -1117,9 +1117,9 @@ function drawGrandpaEd(t,wy){
   const depthF=clamp((y-wy)/band,0,1);
   const sc=lerp(0.95,1.7,depthF);                  // perspective: smaller up the lake, bigger near shore
   ctx.save();ctx.translate(x,y);ctx.scale(dir*sc,sc);
-  // long spray plume behind (it's haulin')
-  ctx.fillStyle='rgba(244,251,253,0.5)';
-  for(let i=0;i<13;i++){const ww=7-i*0.45; if(ww>0){ctx.beginPath();ctx.arc(-32-i*12,7+Math.sin(t*9+i)*2.5,ww,0,TAU);ctx.fill();}}
+  // gentle prop wash behind (he's trolling, taking it slow)
+  ctx.fillStyle='rgba(244,251,253,0.4)';
+  for(let i=0;i<7;i++){const ww=4.5-i*0.5; if(ww>0){ctx.beginPath();ctx.arc(-30-i*9,8+Math.sin(t*6+i)*1.5,ww,0,TAU);ctx.fill();}}
   // bow wake
   ctx.strokeStyle='rgba(255,255,255,0.45)';ctx.lineWidth=2.2;
   ctx.beginPath();ctx.moveTo(30,9);ctx.lineTo(70,3);ctx.moveTo(30,11);ctx.lineTo(64,20);ctx.stroke();
@@ -1133,6 +1133,16 @@ function drawGrandpaEd(t,wy){
   ctx.fillStyle='#e9b78c';ctx.beginPath();ctx.arc(2,-24,5,0,TAU);ctx.fill();
   ctx.fillStyle='#d3d6da';ctx.beginPath();ctx.arc(2,-25,5,Math.PI,TAU);ctx.fill();
   ctx.strokeStyle='#6a4a2c';ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-2,-18);ctx.lineTo(-42,-42);ctx.stroke();
+  // two trolling rods off the stern, lines trailing into the wake behind the boat
+  ctx.strokeStyle='#5a3f25';ctx.lineWidth=1.8;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-28,-4);ctx.lineTo(-44,-20);ctx.stroke();   // rod 1
+  ctx.beginPath();ctx.moveTo(-24,-3);ctx.lineTo(-38,-22);ctx.stroke();   // rod 2
+  const w1=Math.sin(t*3)*1.5, w2=Math.sin(t*3+1)*1.5;
+  ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=0.9;
+  ctx.beginPath();ctx.moveTo(-44,-20);ctx.quadraticCurveTo(-68,0,-92,16+w1);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-38,-22);ctx.quadraticCurveTo(-58,-2,-76,20+w2);ctx.stroke();
+  ctx.fillStyle='#e23b3b';ctx.beginPath();ctx.arc(-92,16+w1,2,0,TAU);ctx.fill();   // lure 1
+  ctx.fillStyle='#f4c542';ctx.beginPath();ctx.arc(-76,20+w2,2,0,TAU);ctx.fill();   // lure 2
   ctx.restore();
   charLabel(x, y-58, '🚤 Grandpa Ed', '#1f8a8a');
 }
