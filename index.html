@@ -166,18 +166,18 @@
   .card .by{font-size:12px;color:#9a8b76;margin-top:-8px;margin-bottom:10px;font-weight:600;}
 
   /* ---------- collection panel ---------- */
-  #logPanel{
+  #logPanel,#goalsPanel{
     position:absolute;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;
     background:rgba(10,18,26,.6);backdrop-filter:blur(3px);
     opacity:0;pointer-events:none;transition:opacity .22s;
   }
-  #logPanel.show{opacity:1;pointer-events:auto;}
+  #logPanel.show,#goalsPanel.show{opacity:1;pointer-events:auto;}
   .logbox{
     width:760px;max-width:94%;max-height:88%;overflow:auto;
     background:var(--panel);border-radius:22px;box-shadow:var(--shadow);padding:18px 20px 22px;
     transform:scale(.97);transition:transform .22s;
   }
-  #logPanel.show .logbox{transform:scale(1);}
+  #logPanel.show .logbox,#goalsPanel.show .logbox{transform:scale(1);}
   .logbox h2{margin:2px 0 2px;font-size:22px;display:flex;align-items:center;gap:8px;}
   .logbox .sub{color:#8a7b66;font-size:13px;margin-bottom:14px;font-weight:600;}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
@@ -205,6 +205,7 @@
       <div id="turn" class="pill"></div>
       <div id="progress" class="pill">📘 0/20</div>
       <button id="muteBtn" class="pill" title="Sound">🔊</button>
+      <button id="goalsBtn" class="pill" title="Goals (G)">🎯 Goals</button>
       <button id="logBtn" class="pill" title="Logbook">📖 Logbook</button>
     </div>
   </div>
@@ -238,6 +239,8 @@
         <div id="cardSizeBest" style="position:absolute;top:-2px;width:2px;height:18px;background:#b8860b;left:0;display:none;"></div>
       </div>
     </div>
+    <div id="cardMedal" style="font-weight:800;font-size:14px;margin:6px 0 0;min-height:18px;"></div>
+    <div id="cardGoal" style="display:none;font-weight:800;font-size:14px;color:#2f8c46;margin-top:3px;"></div>
     <div class="flav" id="cardFlav"></div>
     <div class="by" id="cardBy"></div>
     <button class="bigbtn" id="cardBtn">Next cast →</button>
@@ -248,6 +251,13 @@
     <div class="sub" id="logSub">Every fish you and your buddy reel in shows up here.</div>
     <div class="grid" id="logGrid"></div>
     <div class="closeRow"><button class="bigbtn" id="logClose">Back to fishing</button></div>
+  </div></div>
+
+  <div id="goalsPanel"><div class="logbox">
+    <h2>🎯 Goals</h2>
+    <div class="sub" id="goalsSub"></div>
+    <div id="goalsList"></div>
+    <div class="closeRow"><button class="bigbtn" id="goalsClose">Back to fishing</button></div>
   </div></div>
 </div>
 
@@ -1417,6 +1427,36 @@ function computeHype(sp,size){
   return {h,tier,sizePct};
 }
 /*</computeHype>*/
+/* ----- size medals (derived from a species' best length) ----- */
+const MEDAL_TH={bronze:0.50, silver:0.75, gold:0.92};
+const MEDAL_EMO=['','🥉','🥈','🥇'];
+const MEDAL_NAME=['','Bronze','Silver','Gold'];
+function medalForLen(sp,len){
+  if(!sp||len<=0)return 0;
+  const span=Math.max(0.001,sp.maxLen-sp.minLen), pct=(len-sp.minLen)/span;
+  return pct>=MEDAL_TH.gold?3:pct>=MEDAL_TH.silver?2:pct>=MEDAL_TH.bronze?1:0;
+}
+function medalTally(){const t=[0,0,0,0];for(const id in G.collection){const sp=FISH_BY_ID[id];if(sp)t[medalForLen(sp,(G.collection[id].bestLen)||0)]++;}return t;}
+function anyRarity(c,r){for(const id in c){const sp=FISH_BY_ID[id];if(sp&&sp.rarity===r)return true;}return false;}
+function bestMedal(c){let m=0;for(const id in c){const sp=FISH_BY_ID[id];if(sp){const mm=medalForLen(sp,c[id].bestLen||0);if(mm>m)m=mm;}}return m;}
+function distinctAnglers(c){const s=new Set();for(const id in c){const r=c[id];if(r&&r.firstBy)s.add(r.firstBy);}return Math.min(s.size,2);}
+
+/* ----- goals / challenges (all derived from the collection) ----- */
+const GOALS=[
+  {id:'first', name:'First Catch',           hint:'Land your very first fish',     cur:c=>Math.min(Object.keys(c).length,1), max:1},
+  {id:'five',  name:'Getting the Hang of It',hint:'Catch 5 different species',      cur:c=>Math.min(Object.keys(c).length,5), max:5},
+  {id:'ten',   name:'Seasoned Angler',       hint:'Catch 10 different species',     cur:c=>Math.min(Object.keys(c).length,10), max:10},
+  {id:'all',   name:'Master Angler',         hint:'Catch every species in the lake',cur:c=>Object.keys(c).length, max:FISH.length},
+  {id:'rare',  name:'Something Special',     hint:'Land a Rare fish',               cur:c=>anyRarity(c,'rare')?1:0, max:1},
+  {id:'legend',name:'The Big Leagues',       hint:'Land a Legendary',               cur:c=>anyRarity(c,'legendary')?1:0, max:1},
+  {id:'silver',name:'Silver Lining',         hint:'Earn a Silver medal',            cur:c=>bestMedal(c)>=2?1:0, max:1},
+  {id:'gold',  name:'Gold Standard',         hint:'Earn a Gold medal',              cur:c=>bestMedal(c)>=3?1:0, max:1},
+  {id:'pike30',name:'Water Wolf',            hint:'Land a 30″+ Northern Pike',      cur:c=>(((c.pike&&c.pike.bestLen)||0)>=30)?1:0, max:1},
+  {id:'duo',   name:'Family Affair',         hint:'Dad and Everett each land one',  cur:c=>distinctAnglers(c), max:2},
+];
+function goalDoneSet(c){const s={};for(const g of GOALS)if(g.cur(c)>=g.max)s[g.id]=true;return s;}
+function goalsDoneCount(c){let n=0;for(const g of GOALS)if(g.cur(c)>=g.max)n++;return n;}
+
 function rollSize(sp){
   const len=sp.minLen+(sp.maxLen-sp.minLen)*Math.pow(Math.random(),1.6);
   const wt=Math.max(0.1,Math.pow(len,3)*sp.wt);
@@ -1425,19 +1465,27 @@ function rollSize(sp){
 function landFish(){
   const sp=G.fish, sz=G.fishSize||rollSize(sp);
   const hype=G.hype||computeHype(sp,sz);
+  const goalsBefore=goalDoneSet(G.collection);          // snapshot BEFORE recording the catch
   Sound.splash();spawnSplash(G.activeBobber.x,G.activeBobber.y,18+hype.tier*6);
-  if(!REDUCED_MOTION)G.shake=Math.max(G.shake,6+hype.tier*4);
-  buzz(40+hype.tier*30);
-  const conf = 50+hype.tier*40;
-  const goldPal=['#ffd75a','#ffe14d','#f6b352','#fff3c0','#e0913a'];
-  setTimeout(()=>{Sound.fanfare(hype.tier);spawnConfetti(conf, hype.tier>=3?goldPal:undefined);},220);
-  // record (capture previous best BEFORE updating, for the size meter)
+  // record (capture previous best BEFORE updating, for the size meter + medal)
   const rec=G.collection[sp.id]||{count:0,bestLen:0,bestWt:0,firstBy:G.turn};
   const prevBest=rec.bestLen;
   const isRecord=sz.len>rec.bestLen;
   rec.count++;if(sz.len>rec.bestLen)rec.bestLen=sz.len;if(sz.wt>rec.bestWt)rec.bestWt=sz.wt;
   G.collection[sp.id]=rec;save();
-  G.caught={sp,sz,by:G.turn,isNew:rec.count===1,isRecord,hype,prevBest};
+  // medals + newly completed goals
+  const prevMedal=medalForLen(sp,prevBest), medal=medalForLen(sp,sz.len), medalUp=medal>prevMedal;
+  const goalsAfter=goalDoneSet(G.collection);
+  const goalsHit=GOALS.filter(g=>goalsAfter[g.id]&&!goalsBefore[g.id]).map(g=>g.name);
+  // celebration scales with the moment — a medal bump or a goal hit makes it bigger
+  const big=medalUp||goalsHit.length>0;
+  if(!REDUCED_MOTION)G.shake=Math.max(G.shake,6+hype.tier*4+(big?4:0));
+  buzz(40+hype.tier*30);
+  const conf=50+hype.tier*40+(medalUp?medal*25:0)+(goalsHit.length?40:0);
+  const goldPal=['#ffd75a','#ffe14d','#f6b352','#fff3c0','#e0913a'];
+  const fanTier=Math.max(hype.tier, medalUp?medal:0);
+  setTimeout(()=>{Sound.fanfare(fanTier);spawnConfetti(conf, (hype.tier>=3||medal>=3)?goldPal:undefined);},220);
+  G.caught={sp,sz,by:G.turn,isNew:rec.count===1,isRecord,hype,prevBest,medal,medalUp,goalsHit};
   G.fight=null;
   setMode('result');
   showCard();
@@ -1488,6 +1536,30 @@ const el=id=>document.getElementById(id);
 const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function buzz(ms){ try{ if(!Sound.muted && navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
 function closeLog(){el('logPanel').classList.remove('show');}
+function closeGoals(){el('goalsPanel').classList.remove('show');}
+function openGoals(){
+  el('goalsPanel').classList.add('show');
+  const list=el('goalsList');list.innerHTML='';
+  const c=G.collection;
+  for(const g of GOALS){
+    const cur=Math.min(g.cur(c),g.max), done=cur>=g.max, pct=Math.round(cur/g.max*100);
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid #efe2cb;';
+    const chk=document.createElement('div');chk.textContent=done?'✅':'⬜';chk.style.fontSize='20px';
+    const mid=document.createElement('div');mid.style.flex='1';
+    const nm=document.createElement('div');nm.style.cssText='font-weight:800;font-size:15px;color:'+(done?'#2f8c46':'#2b2118')+';';nm.textContent=g.name;
+    const ht=document.createElement('div');ht.style.cssText='font-size:12px;color:#8a7b66;';ht.textContent=g.hint;
+    mid.appendChild(nm);mid.appendChild(ht);
+    const bw=document.createElement('div');bw.style.cssText='width:84px;height:10px;border-radius:999px;background:#efe2cb;overflow:hidden;flex:0 0 auto;';
+    const bar=document.createElement('div');bar.style.cssText='height:100%;border-radius:999px;width:'+pct+'%;background:'+(done?'#3fae5a':'#f6b352')+';';
+    bw.appendChild(bar);
+    const cnt=document.createElement('div');cnt.style.cssText='font-size:12px;font-weight:700;color:#6b5c49;min-width:36px;text-align:right;';
+    cnt.textContent = g.max>1?(cur+'/'+g.max):(done?'Done':'Locked');
+    row.appendChild(chk);row.appendChild(mid);row.appendChild(bw);row.appendChild(cnt);
+    list.appendChild(row);
+  }
+  el('goalsSub').textContent=goalsDoneCount(c)+' of '+GOALS.length+' goals complete.';
+}
 function toggleMute(){Sound.setMuted(!Sound.muted);el('muteBtn').textContent=Sound.muted?'🔇':'🔊';}
 function dismissCard(){
   if(!el('catchCard').classList.contains('show'))return;
@@ -1502,6 +1574,8 @@ el('actionBtn').addEventListener('pointerdown',e=>{e.preventDefault();Sound.init
 });
 el('logBtn').onclick=openLog;
 el('logClose').onclick=closeLog;
+el('goalsBtn').onclick=openGoals;
+el('goalsClose').onclick=closeGoals;
 el('cardBtn').onclick=dismissCard;
 el('muteBtn').onclick=toggleMute;
 
@@ -1548,11 +1622,13 @@ function showCard(){
   try{
     const {sp,sz,by,isNew,isRecord}=G.caught;
     const tier=(G.caught.hype&&G.caught.hype.tier)||1;
+    const md=G.caught.medal||0, mdUp=G.caught.medalUp;
     el('cardBanner').textContent =
-        sp.rarity==='legendary' ? '🌟 LEGENDARY!'
+        (mdUp&&md>=1)           ? `${MEDAL_EMO[md]} ${MEDAL_NAME[md].toUpperCase()} MEDAL!`
+      : sp.rarity==='legendary' ? '🌟 LEGENDARY!'
       : tier>=3                 ? '🏆 LUNKER!'
       : isNew                   ? '✨ New species!'
-      : isRecord                ? '🥇 New personal best!'
+      : isRecord                ? '⭐ New personal best!'
       :                           'Nice catch!';
     el('cardName').textContent=sp.name;
     const rar=RARITY[sp.rarity];
@@ -1567,6 +1643,15 @@ function showCard(){
     const bestEl=el('cardSizeBest');
     if((G.caught.prevBest||0)>0){bestEl.style.display='block';bestEl.style.left=(bestPct*100).toFixed(0)+'%';}
     else{bestEl.style.display='none';}
+    // medal line for this catch
+    const me=el('cardMedal');
+    if(md>0){ me.textContent=`${MEDAL_EMO[md]} ${MEDAL_NAME[md]} catch${mdUp?' — NEW! ✨':'!'}`;
+      me.style.color = md>=3?'#d39a1e':md>=2?'#7f8086':'#a9743e'; }
+    else { me.textContent='No medal yet — a bigger one earns a 🥉'; me.style.color='#9a8b76'; }
+    // newly-completed goal(s)
+    const gh=G.caught.goalsHit||[], ge=el('cardGoal');
+    if(gh.length){ ge.textContent=`🎯 Goal complete: ${gh[0]}${gh.length>1?` (+${gh.length-1} more)`:''}!`; ge.style.display='block'; }
+    else ge.style.display='none';
     el('cardFlav').textContent=pick(sp.flav);
     const who=ANGLERS[by]||ANGLERS.dad;
     el('cardBy').textContent=`Reeled in by ${who.emoji} ${who.name}`;
@@ -1607,11 +1692,18 @@ function openLog(){
       cs.textContent=caught?`Best ${rec.bestLen}" · ${rec.bestWt} lb · ×${rec.count}`:'Not caught yet';
       cell.appendChild(nm);cell.appendChild(cs);
       const rd=document.createElement('div');rd.className='rdot';rd.style.background=RARITY[sp.rarity].c;cell.appendChild(rd);
-      if(caught){const who=ANGLERS[rec.firstBy]||ANGLERS.dad;const bd=document.createElement('div');bd.className='badge';bd.textContent=who.emoji;cell.appendChild(bd);}
+      if(caught){
+        const who=ANGLERS[rec.firstBy]||ANGLERS.dad;const bd=document.createElement('div');bd.className='badge';bd.textContent=who.emoji;cell.appendChild(bd);
+        const medal=medalForLen(sp,rec.bestLen||0);
+        if(medal){const mb=document.createElement('div');mb.textContent=MEDAL_EMO[medal];
+          mb.style.cssText='position:absolute;bottom:6px;right:7px;font-size:17px;line-height:1;';cell.appendChild(mb);}
+        if(medal>=3)cell.style.boxShadow='0 0 0 2px #f6c560, 0 0 12px rgba(246,179,82,.55)';
+      }
       grid.appendChild(cell);
     }catch(err){/* skip a bad entry, keep the rest of the logbook */}
   }
-  el('logSub').textContent=`${caughtCount()} of ${FISH.length} species logged. ${caughtCount()===FISH.length?'You caught them all! 🎉':'Keep castin’!'}`;
+  const t=medalTally();
+  el('logSub').innerHTML=`🥇 ${t[3]}&nbsp;&nbsp;🥈 ${t[2]}&nbsp;&nbsp;🥉 ${t[1]} &nbsp;·&nbsp; ${caughtCount()}/${FISH.length} species ${caughtCount()===FISH.length?'— all caught! 🎉':''}`;
 }
 function drawFishSilhouette(ctx,sp,cx,cy,L){
   // crude shadow version: reuse drawFish but tint everything dark
@@ -1637,6 +1729,10 @@ function onKeyDown(e){
     if(c==='Escape'||c==='Enter'||c==='KeyL'){closeLog();e.preventDefault();}
     return;
   }
+  if(el('goalsPanel').classList.contains('show')){
+    if(c==='Escape'||c==='Enter'||c==='KeyG'){closeGoals();e.preventDefault();}
+    return;
+  }
   if(el('catchCard').classList.contains('show')){
     if((c==='Enter'||c==='Space')&&!e.repeat){dismissCard();e.preventDefault();}  // fresh press + lockout
     return;
@@ -1644,6 +1740,7 @@ function onKeyDown(e){
   // global shortcuts
   if(c==='KeyM'){toggleMute();return;}
   if(c==='KeyL'){openLog();e.preventDefault();return;}
+  if(c==='KeyG'){openGoals();e.preventDefault();return;}
   Sound.init();
   if(G.mode==='idle'){
     if(c==='Space'){ startCharge(); e.preventDefault(); }
