@@ -709,10 +709,12 @@ function fitL(sp,boxW,boxH){return Math.min(boxW/1.25, boxH/(sp.depth*2.7));}
 
 /* ---------- 3. Audio (WebAudio, generated) ---------- */
 const Sound=(()=>{
-  let ctx=null, muted=false, ambGain=null;
+  let ctx=null, muted=false, ambGain=null, kicked=false;
   function ensure(){
     if(!ctx){try{ctx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return null;}}
     if(ctx.state==='suspended')ctx.resume();
+    if(!kicked){ kicked=true;   // iOS needs a silent buffer played in a gesture to fully unlock audio
+      try{const b=ctx.createBuffer(1,1,22050),s=ctx.createBufferSource();s.buffer=b;s.connect(ctx.destination);s.start(0);}catch(e){} }
     return ctx;
   }
   function tone(f,t0,dur,type='sine',vol=.2,slideTo){
@@ -771,7 +773,9 @@ const Sound=(()=>{
     },
     fail(){tone(300,0,.25,'sawtooth',.12,140);},
     setMuted(m){muted=m;if(ambGain)ambGain.gain.value=m?0:.035;},
-    get muted(){return muted;}
+    get muted(){return muted;},
+    resume(){ if(ctx&&ctx.state==='suspended')ctx.resume(); },
+    get running(){ return !!ctx && ctx.state==='running'; }
   };
 })();
 
@@ -1825,7 +1829,15 @@ function frame(now){
 
 /* ---------- boot ---------- */
 load();resize();updateUI();showTurnBanner();
-window.addEventListener('pointerdown',()=>Sound.init(),{once:true});
+// robust audio unlock for iOS Safari: try on several gesture types until the
+// AudioContext is actually running, then stop; re-resume on returning to the tab
+function audioKick(){
+  Sound.init();
+  if(Sound.running){['pointerdown','touchstart','touchend','mousedown','click','keydown'].forEach(ev=>window.removeEventListener(ev,audioKick,true));}
+}
+['pointerdown','touchstart','touchend','mousedown','click','keydown'].forEach(ev=>window.addEventListener(ev,audioKick,true));
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden)Sound.resume(); });
+window.addEventListener('focus',()=>Sound.resume());
 requestAnimationFrame(frame);
 </script>
 </body>
